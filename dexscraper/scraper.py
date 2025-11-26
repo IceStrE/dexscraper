@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Tuple, Union
 
 import websockets
+from websockets.exceptions import InvalidStatusCode
 
 from .cloudflare_bypass import CloudflareBypass
 from .config import Chain, PresetConfigs, RankBy, ScrapingConfig, Timeframe
@@ -65,6 +66,7 @@ class DexScraper:
         self._retry_count = 0
         self._headers_rotation = 0
         self._stream_start_logged = False
+        self._403_hint_logged = False
 
         # Cloudflare bypass
         self.cf_bypass = (
@@ -204,6 +206,17 @@ class DexScraper:
             except Exception as e:
                 self._retry_count = attempt + 1
                 logger.error(f"Connection attempt {attempt + 1} failed: {e}")
+
+                if (
+                    isinstance(e, InvalidStatusCode)
+                    and getattr(e, "status_code", None) == 403
+                    and not self._403_hint_logged
+                ):
+                    self._403_hint_logged = True
+                    logger.error(
+                        "HTTP 403: подключение отклонено. Проверьте доступность DexScreener, "
+                        "сетевые ограничения и при необходимости включите use_cloudflare_bypass=True"
+                    )
 
                 if attempt < self.max_retries - 1:
                     delay = self._get_backoff_delay()
