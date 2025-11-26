@@ -64,6 +64,7 @@ class DexScraper:
         # Connection state
         self._retry_count = 0
         self._headers_rotation = 0
+        self._stream_start_logged = False
 
         # Cloudflare bypass
         self.cf_bypass = (
@@ -1280,6 +1281,10 @@ class DexScraper:
         use_enhanced_extraction: bool = True,
     ) -> AsyncGenerator[Union[List[TradingPair], ExtractedTokenBatch], None]:
         """Потоковая выдача торговых пар с поддержкой async for и колбэков."""
+
+        if not self._stream_start_logged:
+            logger.info("WebSocket стриминг запущен")
+            self._stream_start_logged = True
 
         while True:
             try:
