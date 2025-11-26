@@ -52,7 +52,9 @@ class DexScraper:
         # Setup logging
         level = logging.DEBUG if debug else logging.ERROR
         logging.basicConfig(
-            level=level, format="%(asctime)s - %(levelname)s - %(message)s"
+            level=level,
+            format="[%(asctime)s.%(msecs)03d] %(levelname)s %(message)s",
+            datefmt="%H:%M:%S",
         )
 
         # Rate limiting
@@ -168,15 +170,31 @@ class DexScraper:
 
                 logger.debug(f"Connection attempt {attempt + 1}/{self.max_retries}")
 
-                websocket = await websockets.connect(
-                    uri,
-                    extra_headers=headers,
-                    ssl=ssl_context,
-                    max_size=None,
-                    ping_timeout=30,
-                    ping_interval=20,
-                    close_timeout=10,
-                )
+                try:
+                    websocket = await websockets.connect(
+                        uri,
+                        extra_headers=headers,
+                        ssl=ssl_context,
+                        max_size=None,
+                        ping_timeout=30,
+                        ping_interval=20,
+                        close_timeout=10,
+                    )
+                except TypeError as type_err:
+                    if "extra_headers" in str(type_err):
+                        logger.warning(
+                            "extra_headers не поддерживается текущей версией websockets; пробуем без заголовков"
+                        )
+                        websocket = await websockets.connect(
+                            uri,
+                            ssl=ssl_context,
+                            max_size=None,
+                            ping_timeout=30,
+                            ping_interval=20,
+                            close_timeout=10,
+                        )
+                    else:
+                        raise
 
                 self._retry_count = 0  # Reset on successful connection
                 logger.info("WebSocket connection established")
