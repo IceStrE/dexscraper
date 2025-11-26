@@ -104,13 +104,11 @@ async def main() -> None:
         config=PresetConfigs.pumpfun_trending(),
     )
 
-    def handle_stream(data):
+    async for data in scraper.stream_pairs(use_enhanced_extraction=True):
         if isinstance(data, ExtractedTokenBatch):
             log_batch(data, logger)
         else:
             log_legacy_pairs(data, logger)
-
-    await scraper.stream_pairs(callback=handle_stream, use_enhanced_extraction=True)
 
 
 if __name__ == "__main__":

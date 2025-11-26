@@ -9,7 +9,7 @@ import ssl
 import struct
 import time
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Tuple, Union
 
 import websockets
 
@@ -1258,10 +1258,11 @@ class DexScraper:
         callback: Optional[
             Callable[[Union[List[TradingPair], ExtractedTokenBatch]], None]
         ] = None,
-        output_format: str = "json",
+        output_format: Optional[str] = "json",
         use_enhanced_extraction: bool = True,
-    ) -> None:
-        """Stream trading pairs with enhanced extraction capability."""
+    ) -> AsyncGenerator[Union[List[TradingPair], ExtractedTokenBatch], None]:
+        """Потоковая выдача торговых пар с поддержкой async for и колбэков."""
+
         while True:
             try:
                 if use_enhanced_extraction:
@@ -1269,15 +1270,19 @@ class DexScraper:
                     if batch.tokens:
                         if callback:
                             callback(batch)
-                        else:
+                        elif output_format:
                             await self._output_enhanced_batch(batch, output_format)
+
+                        yield batch
                 else:
                     pairs = await self.get_pairs_once()
                     if pairs:
                         if callback:
                             callback(pairs)
-                        else:
+                        elif output_format:
                             await self._output_pairs(pairs, output_format)
+
+                        yield pairs
 
                 await asyncio.sleep(5)  # Wait between extractions
 
