@@ -236,6 +236,17 @@ class DexScraper:
         finally:
             await websocket.close()
 
+    async def extract_complete_token_data(self) -> ExtractedTokenBatch:
+        """Совместимый алиас для полной выборки данных о токенах.
+
+        Метод `stream_pairs` обращается к `extract_complete_token_data`, однако в
+        некоторых версиях он отсутствовал, что приводило к `AttributeError` при
+        запуске примеров. Чтобы сохранить поведение и не дублировать логику,
+        метод делегирует в основной ``extract_token_data``.
+        """
+
+        return await self.extract_token_data()
+
     async def _extract_all_tokens(
         self, data: bytes, data_start: int
     ) -> List[TokenProfile]:
