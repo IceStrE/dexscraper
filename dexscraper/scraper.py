@@ -9,9 +9,10 @@ import ssl
 import struct
 import time
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, AsyncGenerator, Callable, Dict, List, Optional, Tuple, Union
 
 import websockets
+from websockets.exceptions import InvalidStatusCode
 
 from .cloudflare_bypass import CloudflareBypass
 from .config import Chain, PresetConfigs, RankBy, ScrapingConfig, Timeframe
@@ -52,7 +53,9 @@ class DexScraper:
         # Setup logging
         level = logging.DEBUG if debug else logging.ERROR
         logging.basicConfig(
-            level=level, format="%(asctime)s - %(levelname)s - %(message)s"
+            level=level,
+            format="[%(asctime)s.%(msecs)03d] %(levelname)s %(message)s",
+            datefmt="%H:%M:%S",
         )
 
         # Rate limiting
@@ -62,6 +65,8 @@ class DexScraper:
         # Connection state
         self._retry_count = 0
         self._headers_rotation = 0
+        self._stream_start_logged = False
+        self._403_hint_logged = False
 
         # Cloudflare bypass
         self.cf_bypass = (
@@ -168,15 +173,31 @@ class DexScraper:
 
                 logger.debug(f"Connection attempt {attempt + 1}/{self.max_retries}")
 
-                websocket = await websockets.connect(
-                    uri,
-                    extra_headers=headers,
-                    ssl=ssl_context,
-                    max_size=None,
-                    ping_timeout=30,
-                    ping_interval=20,
-                    close_timeout=10,
-                )
+                try:
+                    websocket = await websockets.connect(
+                        uri,
+                        extra_headers=headers,
+                        ssl=ssl_context,
+                        max_size=None,
+                        ping_timeout=30,
+                        ping_interval=20,
+                        close_timeout=10,
+                    )
+                except TypeError as type_err:
+                    if "extra_headers" in str(type_err):
+                        logger.warning(
+                            "extra_headers не поддерживается текущей версией websockets; пробуем без заголовков"
+                        )
+                        websocket = await websockets.connect(
+                            uri,
+                            ssl=ssl_context,
+                            max_size=None,
+                            ping_timeout=30,
+                            ping_interval=20,
+                            close_timeout=10,
+                        )
+                    else:
+                        raise
 
                 self._retry_count = 0  # Reset on successful connection
                 logger.info("WebSocket connection established")
@@ -185,6 +206,17 @@ class DexScraper:
             except Exception as e:
                 self._retry_count = attempt + 1
                 logger.error(f"Connection attempt {attempt + 1} failed: {e}")
+
+                if (
+                    isinstance(e, InvalidStatusCode)
+                    and getattr(e, "status_code", None) == 403
+                    and not self._403_hint_logged
+                ):
+                    self._403_hint_logged = True
+                    logger.error(
+                        "HTTP 403: подключение отклонено. Проверьте доступность DexScreener, "
+                        "сетевые ограничения и при необходимости включите use_cloudflare_bypass=True"
+                    )
 
                 if attempt < self.max_retries - 1:
                     delay = self._get_backoff_delay()
@@ -235,6 +267,17 @@ class DexScraper:
             return ExtractedTokenBatch()
         finally:
             await websocket.close()
+
+    async def extract_complete_token_data(self) -> ExtractedTokenBatch:
+        """Совместимый алиас для полной выборки данных о токенах.
+
+        Метод `stream_pairs` обращается к `extract_complete_token_data`, однако в
+        некоторых версиях он отсутствовал, что приводило к `AttributeError` при
+        запуске примеров. Чтобы сохранить поведение и не дублировать логику,
+        метод делегирует в основной ``extract_token_data``.
+        """
+
+        return await self.extract_token_data()
 
     async def _extract_all_tokens(
         self, data: bytes, data_start: int
@@ -1247,10 +1290,15 @@ class DexScraper:
         callback: Optional[
             Callable[[Union[List[TradingPair], ExtractedTokenBatch]], None]
         ] = None,
-        output_format: str = "json",
+        output_format: Optional[str] = "json",
         use_enhanced_extraction: bool = True,
-    ) -> None:
-        """Stream trading pairs with enhanced extraction capability."""
+    ) -> AsyncGenerator[Union[List[TradingPair], ExtractedTokenBatch], None]:
+        """Потоковая выдача торговых пар с поддержкой async for и колбэков."""
+
+        if not self._stream_start_logged:
+            logger.info("WebSocket стриминг запущен")
+            self._stream_start_logged = True
+
         while True:
             try:
                 if use_enhanced_extraction:
@@ -1258,15 +1306,19 @@ class DexScraper:
                     if batch.tokens:
                         if callback:
                             callback(batch)
-                        else:
+                        elif output_format:
                             await self._output_enhanced_batch(batch, output_format)
+
+                        yield batch
                 else:
                     pairs = await self.get_pairs_once()
                     if pairs:
                         if callback:
                             callback(pairs)
-                        else:
+                        elif output_format:
                             await self._output_pairs(pairs, output_format)
+
+                        yield pairs
 
                 await asyncio.sleep(5)  # Wait between extractions
 

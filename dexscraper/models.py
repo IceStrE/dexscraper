@@ -345,6 +345,12 @@ class ExtractedTokenBatch:
         """Convert all tokens to legacy TradingPair format."""
         return [token.to_trading_pair() for token in self.tokens]
 
+    @property
+    def pairs(self) -> list[TradingPair]:
+        """Совместимая обёртка для получения списка торговых пар."""
+
+        return self.to_trading_pairs()
+
     def to_ohlc_batch(self, timeframe: str = "1m") -> list[OHLCData]:
         """Convert all tokens to OHLC format."""
         ohlc_data = []
