@@ -1,0 +1,14 @@
+{
+  "name": "dexscreener-worker",
+  "version": "1.0.0",
+  "description": "Headless Playwright worker to relay DexScreener WebSocket messages to a local WS server",
+  "main": "dexscreener-worker.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node dexscreener-worker.js"
+  },
+  "dependencies": {
+    "playwright": "^1.43.0",
+    "ws": "^8.17.1"
+  }
+}

@@ -168,3 +168,6 @@ cython_debug/
 data/
 output/
 *.json
+node_modules/
+!package.json
+!package-lock.json
