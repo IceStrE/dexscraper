@@ -12,6 +12,10 @@
 
 A comprehensive Python package for real-time cryptocurrency trading data from DexScreener's WebSocket API. Supports multiple blockchain networks with rich CLI interface and programmatic access.
 
+## 🧭 Новая рабочая инструкция
+
+Предыдущие подсказки запуска могли устареть. Используйте актуальное руководство из [RUNNING.md](RUNNING.md) — там собраны проверенные команды для CLI, Rich UI, Python-API и make-ярлыков.
+
 ## ✨ Features
 
 ### 🏗️ **Professional Package Architecture**
